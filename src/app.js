@@ -8,11 +8,6 @@ let dragging = null;
 let resizing = null;
 let offsetX, offsetY;
 
-// --- Cropping state ---
-let cropping = null; // index of image being cropped
-let cropRect = null; // {x, y, w, h} in image coordinates
-let cropStart = null;
-
 // --- Add at the top with other state variables ---
 let resizeCorner = null;
 
@@ -20,12 +15,27 @@ upload.addEventListener('change', (e) => {
   Array.from(e.target.files).forEach(file => {
     const img = new window.Image();
     img.onload = () => {
+      // --- Resize to fit nicely in canvas ---
+      const margin = 40;
+      const maxW = canvas.width - margin * 2;
+      const maxH = canvas.height - margin * 2;
+      let w = img.width;
+      let h = img.height;
+      const aspect = w / h;
+      if (w > maxW) {
+        w = maxW;
+        h = w / aspect;
+      }
+      if (h > maxH) {
+        h = maxH;
+        w = h * aspect;
+      }
       images.push({
         img,
-        x: 50 + images.length * 30,
-        y: 50 + images.length * 30,
-        w: img.width / 4,
-        h: img.height / 4
+        x: margin + images.length * 30,
+        y: margin + images.length * 30,
+        w,
+        h
       });
       draw();
     };
@@ -74,15 +84,6 @@ function draw() {
           ctx.arc(h.x, h.y, 8, 0, 2 * Math.PI);
           ctx.fill();
         });
-      }
-      // Draw crop rect if cropping this image
-      if (cropping === idx && cropRect) {
-        ctx.save();
-        ctx.strokeStyle = '#e83e8c';
-        ctx.lineWidth = 2;
-        ctx.setLineDash([6, 4]);
-        ctx.strokeRect(cropRect.x, cropRect.y, cropRect.w, cropRect.h);
-        ctx.restore();
       }
     }
   });
@@ -175,7 +176,7 @@ canvas.addEventListener('mousedown', (e) => {
   }
   selectedImageIdx = null;
   dragging = null;
-  // --- Shift+resize for cropping ---
+  // --- Shift+resize for cropping --- (remove cropping logic)
   for (let i = images.length - 1; i >= 0; i--) {
     const obj = images[i];
     // Check all four resize handles for this object (not just selected)
@@ -346,15 +347,6 @@ document.addEventListener('mousemove', (e) => {
       }
     }
     draw();
-  } else if (cropping !== null && cropStart) {
-    const img = images[cropping];
-    // Clamp to image bounds
-    let x1 = Math.max(img.x, Math.min(cropStart.x, mouse.x));
-    let y1 = Math.max(img.y, Math.min(cropStart.y, mouse.y));
-    let x2 = Math.min(img.x + img.w, Math.max(cropStart.x, mouse.x));
-    let y2 = Math.min(img.y + img.h, Math.max(cropStart.y, mouse.y));
-    cropRect = { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
-    draw();
   }
 });
 
@@ -366,45 +358,6 @@ document.addEventListener('mouseup', (e) => {
     dragging = null;
     resizing = null;
     resizeCorner = null;
-    if (cropping !== null && cropRect && cropRect.w > 5 && cropRect.h > 5) {
-      // Apply crop
-      const imgObj = images[cropping];
-      const relX = (cropRect.x - imgObj.x) / imgObj.w;
-      const relY = (cropRect.y - imgObj.y) / imgObj.h;
-      const relW = cropRect.w / imgObj.w;
-      const relH = cropRect.h / imgObj.h;
-      const tempCanvas = document.createElement('canvas');
-      tempCanvas.width = cropRect.w;
-      tempCanvas.height = cropRect.h;
-      const tctx = tempCanvas.getContext('2d');
-      tctx.drawImage(
-        imgObj.img,
-        relX * imgObj.img.width,
-        relY * imgObj.img.height,
-        relW * imgObj.img.width,
-        relH * imgObj.img.height,
-        0, 0, cropRect.w, cropRect.h
-      );
-      const croppedImg = new window.Image();
-      croppedImg.onload = () => {
-        imgObj.img = croppedImg;
-        imgObj.x = cropRect.x;
-        imgObj.y = cropRect.y;
-        imgObj.w = cropRect.w;
-        imgObj.h = cropRect.h;
-        cropping = null;
-        cropRect = null;
-        cropStart = null;
-        draw();
-      };
-      croppedImg.src = tempCanvas.toDataURL();
-    } else if (cropping !== null) {
-      // Cancel crop if mouseup without valid rect
-      cropping = null;
-      cropRect = null;
-      cropStart = null;
-      draw();
-    }
   }
 });
 
@@ -432,12 +385,27 @@ canvas.addEventListener('drop', (e) => {
     if (!file.type.startsWith('image/')) return;
     const img = new window.Image();
     img.onload = () => {
+      // --- Resize to fit nicely in canvas ---
+      const margin = 40;
+      const maxW = canvas.width - margin * 2;
+      const maxH = canvas.height - margin * 2;
+      let w = img.width;
+      let h = img.height;
+      const aspect = w / h;
+      if (w > maxW) {
+        w = maxW;
+        h = w / aspect;
+      }
+      if (h > maxH) {
+        h = maxH;
+        w = h * aspect;
+      }
       images.push({
         img,
-        x: 50 + images.length * 30,
-        y: 50 + images.length * 30,
-        w: img.width / 4,
-        h: img.height / 4
+        x: margin + images.length * 30,
+        y: margin + images.length * 30,
+        w,
+        h
       });
       draw();
     };
@@ -512,20 +480,7 @@ deleteOption.onclick = function() {
   contextMenu.style.display = 'none';
   contextImageIdx = null;
 };
-const cropOption = document.createElement('div');
-cropOption.textContent = 'Crop';
-cropOption.style.cursor = 'pointer';
-cropOption.onclick = function() {
-  if (contextImageIdx !== null && !images[contextImageIdx].type) {
-    cropping = contextImageIdx;
-    cropRect = null;
-    cropStart = null;
-    contextMenu.style.display = 'none';
-    draw();
-  }
-};
 contextMenu.appendChild(deleteOption);
-contextMenu.appendChild(cropOption);
 
 contextMenu.addEventListener('click', () => {
   if (contextImageIdx !== null) {
