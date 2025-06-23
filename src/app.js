@@ -11,6 +11,13 @@ let offsetX, offsetY;
 // --- Add at the top with other state variables ---
 let resizeCorner = null;
 
+// --- Crop mode state ---
+let cropMode = false;
+let cropImageIdx = null;
+let cropRect = null;
+let cropDrag = null; // {type: 'move'|'edge'|'corner', edge/corner: string}
+let cropOffset = {x: 0, y: 0};
+
 upload.addEventListener('change', (e) => {
   Array.from(e.target.files).forEach(file => {
     const img = new window.Image();
@@ -45,33 +52,13 @@ upload.addEventListener('change', (e) => {
 
 function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  // Draw all images and text boxes first
   images.forEach((imgObj, idx) => {
-    if (imgObj.type === 'text') {
-      // Draw background
-      ctx.fillStyle = imgObj.bg || 'rgba(255,255,255,0.7)';
-      ctx.fillRect(imgObj.x, imgObj.y, imgObj.w, imgObj.h);
-      // Draw border
-      ctx.strokeStyle = '#007bff';
-      ctx.strokeRect(imgObj.x, imgObj.y, imgObj.w, imgObj.h);
-      // Draw text
-      ctx.fillStyle = imgObj.color || '#222';
-      ctx.font = imgObj.font || '16px sans-serif';
-      ctx.textBaseline = 'middle';
-      ctx.textAlign = 'center';
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(imgObj.x, imgObj.y, imgObj.w, imgObj.h);
-      ctx.clip();
-      ctx.fillText(imgObj.text, imgObj.x + imgObj.w / 2, imgObj.y + imgObj.h / 2);
-      ctx.restore();
-      // Draw resize handle
-      ctx.fillStyle = '#007bff';
-      ctx.fillRect(imgObj.x + imgObj.w - 10, imgObj.y + imgObj.h - 10, 10, 10);
-    } else {
+    // Remove text box drawing logic
+    // Only draw images
+    if (!imgObj.type) {
       ctx.drawImage(imgObj.img, imgObj.x, imgObj.y, imgObj.w, imgObj.h);
-      // Draw resize handles at all four corners for selected
-      if (selectedImageIdx === idx) {
+      // Draw resize handles if not in crop mode
+      if (selectedImageIdx === idx && (!cropMode || cropImageIdx !== idx)) {
         const handles = [
           { x: imgObj.x, y: imgObj.y }, // top-left
           { x: imgObj.x + imgObj.w, y: imgObj.y }, // top-right
@@ -84,6 +71,28 @@ function draw() {
           ctx.arc(h.x, h.y, 8, 0, 2 * Math.PI);
           ctx.fill();
         });
+      }
+      // Draw crop box if in crop mode for this image
+      if (cropMode && cropImageIdx === idx && cropRect) {
+        ctx.save();
+        ctx.strokeStyle = '#ff9800';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([6, 4]);
+        ctx.strokeRect(cropRect.x, cropRect.y, cropRect.w, cropRect.h);
+        ctx.setLineDash([]);
+        // Draw crop handles (corners and edges)
+        const handles = getCropHandles(cropRect);
+        ctx.fillStyle = '#ff9800';
+        handles.forEach(h => {
+          ctx.beginPath();
+          ctx.arc(h.x, h.y, 6, 0, 2 * Math.PI);
+          ctx.fill();
+        });
+        // Draw edge handles (small rectangles)
+        getCropEdges(cropRect).forEach(e => {
+          ctx.fillRect(e.x - 4, e.y - 8, 8, 16);
+        });
+        ctx.restore();
       }
     }
   });
@@ -174,6 +183,8 @@ canvas.addEventListener('mousedown', (e) => {
     document.body.style.cursor = 'nwse-resize';
     return;
   }
+  // --- Prevent image selection/drag when cropping ---
+  if (cropMode) return;
   selectedImageIdx = null;
   dragging = null;
   // --- Shift+resize for cropping --- (remove cropping logic)
@@ -425,49 +436,7 @@ contextMenu.style.zIndex = 1000;
 contextMenu.textContent = 'Delete';
 document.body.appendChild(contextMenu);
 
-// Add text box context menu
-let textMenu = document.createElement('div');
-textMenu.style.position = 'absolute';
-textMenu.style.display = 'none';
-textMenu.style.background = '#fff';
-textMenu.style.border = '1px solid #ccc';
-textMenu.style.padding = '4px 12px';
-textMenu.style.cursor = 'pointer';
-textMenu.style.zIndex = 1000;
-textMenu.textContent = 'Add Text Box';
-document.body.appendChild(textMenu);
-
-let contextImageIdx = null;
-
-canvas.addEventListener('contextmenu', (e) => {
-  e.preventDefault();
-  const mouse = getMouse(e);
-  contextImageIdx = null;
-  let onImage = false;
-  for (let i = images.length - 1; i >= 0; i--) {
-    const img = images[i];
-    if (mouse.x > img.x && mouse.x < img.x + img.w && mouse.y > img.y && mouse.y < img.y + img.h) {
-      contextImageIdx = i;
-      contextMenu.style.left = e.pageX + 'px';
-      contextMenu.style.top = e.pageY + 'px';
-      contextMenu.style.display = 'block';
-      textMenu.style.display = 'none';
-      onImage = true;
-      return;
-    }
-  }
-  contextMenu.style.display = 'none';
-  // If not on image, show text menu
-  if (!onImage) {
-    textMenu.style.left = e.pageX + 'px';
-    textMenu.style.top = e.pageY + 'px';
-    textMenu.style.display = 'block';
-    textMenu._canvasX = mouse.x;
-    textMenu._canvasY = mouse.y;
-  }
-});
-
-// --- Add crop to context menu for images ---
+// --- Crop to context menu for images ---
 contextMenu.innerHTML = '';
 const deleteOption = document.createElement('div');
 deleteOption.textContent = 'Delete';
@@ -482,42 +451,32 @@ deleteOption.onclick = function() {
 };
 contextMenu.appendChild(deleteOption);
 
-contextMenu.addEventListener('click', () => {
-  if (contextImageIdx !== null) {
-    images.splice(contextImageIdx, 1);
-    draw();
+let contextImageIdx = null;
+
+canvas.addEventListener('contextmenu', (e) => {
+  e.preventDefault();
+  const mouse = getMouse(e);
+  contextImageIdx = null;
+  for (let i = images.length - 1; i >= 0; i--) {
+    const img = images[i];
+    if (mouse.x > img.x && mouse.x < img.x + img.w && mouse.y > img.y && mouse.y < img.y + img.h) {
+      contextImageIdx = i;
+      contextMenu.style.left = e.pageX + 'px';
+      contextMenu.style.top = e.pageY + 'px';
+      contextMenu.style.display = 'block';
+      return;
+    }
   }
   contextMenu.style.display = 'none';
-  contextImageIdx = null;
-});
-
-textMenu.addEventListener('click', () => {
-  // Add a sample text box object
-  images.push({
-    type: 'text',
-    text: 'Sample Text',
-    x: textMenu._canvasX || 60,
-    y: textMenu._canvasY || 60,
-    w: 120,
-    h: 40,
-    font: '16px sans-serif',
-    color: '#222',
-    bg: 'rgba(255,255,255,0.7)'
-  });
-  draw();
-  textMenu.style.display = 'none';
 });
 
 document.addEventListener('click', (e) => {
-  if (e.target !== contextMenu && e.target !== textMenu) {
+  if (e.target !== contextMenu) {
     contextMenu.style.display = 'none';
     contextImageIdx = null;
-    textMenu.style.display = 'none';
   }
 });
 
-// Remove selected image with Delete or Backspace key
-let selectedImageIdx = null;
 document.addEventListener('keydown', (e) => {
   if ((e.key === 'Delete' || e.key === 'Backspace') && selectedImageIdx !== null) {
     images.splice(selectedImageIdx, 1);
@@ -545,3 +504,235 @@ function setCanvasSizeCm(widthCm, heightCm) {
   draw();
 }
 // Example usage: setCanvasSizeCm(21, 29.7); // A4 size
+
+// --- Crop handles helpers ---
+function getCropHandles(rect) {
+  // 4 corners
+  return [
+    { x: rect.x, y: rect.y, corner: 'tl' },
+    { x: rect.x + rect.w, y: rect.y, corner: 'tr' },
+    { x: rect.x, y: rect.y + rect.h, corner: 'bl' },
+    { x: rect.x + rect.w, y: rect.y + rect.h, corner: 'br' }
+  ];
+}
+function getCropEdges(rect) {
+  // 4 edges (center of each edge)
+  return [
+    { x: rect.x + rect.w / 2, y: rect.y, edge: 'top' },
+    { x: rect.x + rect.w / 2, y: rect.y + rect.h, edge: 'bottom' },
+    { x: rect.x, y: rect.y + rect.h / 2, edge: 'left' },
+    { x: rect.x + rect.w, y: rect.y + rect.h / 2, edge: 'right' }
+  ];
+}
+
+// --- Double click to enter/exit crop mode ---
+canvas.addEventListener('dblclick', (e) => {
+  const mouse = getMouse(e);
+  if (!cropMode) {
+    // Enter crop mode if double clicked on image
+    for (let i = images.length - 1; i >= 0; i--) {
+      const obj = images[i];
+      if (!obj.type && mouse.x > obj.x && mouse.x < obj.x + obj.w && mouse.y > obj.y && mouse.y < obj.y + obj.h) {
+        cropMode = true;
+        cropImageIdx = i;
+        // Default crop rect: full image
+        cropRect = {
+          x: obj.x + obj.w * 0.1,
+          y: obj.y + obj.h * 0.1,
+          w: obj.w * 0.8,
+          h: obj.h * 0.8
+        };
+        cropDrag = null;
+        draw();
+        return;
+      }
+    }
+  } else if (cropMode && cropImageIdx !== null) {
+    // Apply crop
+    const obj = images[cropImageIdx];
+    // Calculate crop in image coordinates
+    const cropX = (cropRect.x - obj.x) * (obj.img.width / obj.w);
+    const cropY = (cropRect.y - obj.y) * (obj.img.height / obj.h);
+    const cropW = cropRect.w * (obj.img.width / obj.w);
+    const cropH = cropRect.h * (obj.img.height / obj.h);
+    // Create cropped image
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = Math.max(1, Math.round(cropW));
+    tempCanvas.height = Math.max(1, Math.round(cropH));
+    const tctx = tempCanvas.getContext('2d');
+    tctx.drawImage(obj.img, cropX, cropY, cropW, cropH, 0, 0, tempCanvas.width, tempCanvas.height);
+    const croppedImg = new window.Image();
+    croppedImg.onload = () => {
+      // Replace image object with cropped version, keep position and size of crop rect
+      obj.img = croppedImg;
+      obj.x = cropRect.x;
+      obj.y = cropRect.y;
+      obj.w = cropRect.w;
+      obj.h = cropRect.h;
+      cropMode = false;
+      cropImageIdx = null;
+      cropRect = null;
+      cropDrag = null;
+      draw();
+    };
+    croppedImg.src = tempCanvas.toDataURL();
+  }
+});
+
+// --- Crop box drag/resize logic ---
+canvas.addEventListener('mousedown', (e) => {
+  // ...existing code...
+  if (cropMode && cropImageIdx !== null && cropRect) {
+    const mouse = getMouse(e);
+    // Check corners first
+    const handles = getCropHandles(cropRect);
+    for (let h of handles) {
+      if (Math.hypot(mouse.x - h.x, mouse.y - h.y) <= 10) {
+        cropDrag = { type: 'corner', corner: h.corner };
+        cropOffset.x = mouse.x - h.x;
+        cropOffset.y = mouse.y - h.y;
+        return;
+      }
+    }
+    // Check edges
+    const edges = getCropEdges(cropRect);
+    for (let ed of edges) {
+      if (ed.edge === 'top' || ed.edge === 'bottom') {
+        if (Math.abs(mouse.x - ed.x) < cropRect.w / 2 && Math.abs(mouse.y - ed.y) < 12) {
+          cropDrag = { type: 'edge', edge: ed.edge };
+          cropOffset.y = mouse.y - ed.y;
+          return;
+        }
+      } else {
+        if (Math.abs(mouse.y - ed.y) < cropRect.h / 2 && Math.abs(mouse.x - ed.x) < 12) {
+          cropDrag = { type: 'edge', edge: ed.edge };
+          cropOffset.x = mouse.x - ed.x;
+          return;
+        }
+      }
+    }
+    // Check inside crop rect for move
+    if (
+      mouse.x > cropRect.x && mouse.x < cropRect.x + cropRect.w &&
+      mouse.y > cropRect.y && mouse.y < cropRect.y + cropRect.h
+    ) {
+      cropDrag = { type: 'move' };
+      cropOffset.x = mouse.x - cropRect.x;
+      cropOffset.y = mouse.y - cropRect.y;
+      return;
+    }
+    // If click outside crop rect, exit crop mode
+    cropMode = false;
+    cropImageIdx = null;
+    cropRect = null;
+    cropDrag = null;
+    draw();
+    return;
+  }
+  // ...existing code...
+});
+
+document.addEventListener('mousemove', (e) => {
+  // ...existing code...
+  if (cropMode && cropImageIdx !== null && cropRect && cropDrag) {
+    const mouse = getMouse(e);
+    let r = { ...cropRect };
+    const minW = 30, minH = 30;
+    if (cropDrag.type === 'move') {
+      // Move crop rect, clamp to image bounds
+      const obj = images[cropImageIdx];
+      let nx = mouse.x - cropOffset.x;
+      let ny = mouse.y - cropOffset.y;
+      nx = Math.max(obj.x, Math.min(nx, obj.x + obj.w - r.w));
+      ny = Math.max(obj.y, Math.min(ny, obj.y + obj.h - r.h));
+      cropRect.x = nx;
+      cropRect.y = ny;
+    } else if (cropDrag.type === 'corner') {
+      // Resize from corner, clamp to image bounds and min size
+      const obj = images[cropImageIdx];
+      let mx = mouse.x - cropOffset.x;
+      let my = mouse.y - cropOffset.y;
+      if (cropDrag.corner === 'tl') {
+        let nx = Math.min(mx, r.x + r.w - minW);
+        let ny = Math.min(my, r.y + r.h - minH);
+        let nw = (r.x + r.w) - nx;
+        let nh = (r.y + r.h) - ny;
+        if (nx < obj.x) { nx = obj.x; nw = (r.x + r.w) - nx; }
+        if (ny < obj.y) { ny = obj.y; nh = (r.y + r.h) - ny; }
+        if (nw >= minW && nh >= minH) {
+          cropRect.x = nx; cropRect.y = ny; cropRect.w = nw; cropRect.h = nh;
+        }
+      } else if (cropDrag.corner === 'tr') {
+        let nx = r.x;
+        let ny = Math.min(my, r.y + r.h - minH);
+        let nw = Math.max(minW, mx - r.x);
+        let nh = (r.y + r.h) - ny;
+        if (mx > obj.x + obj.w) { nw = obj.x + obj.w - r.x; }
+        if (ny < obj.y) { ny = obj.y; nh = (r.y + r.h) - ny; }
+        if (nw >= minW && nh >= minH) {
+          cropRect.y = ny; cropRect.w = nw; cropRect.h = nh;
+        }
+      } else if (cropDrag.corner === 'bl') {
+        let nx = Math.min(mx, r.x + r.w - minW);
+        let ny = r.y;
+        let nw = (r.x + r.w) - nx;
+        let nh = Math.max(minH, mouse.y - r.y - cropOffset.y);
+        if (nx < obj.x) { nx = obj.x; nw = (r.x + r.w) - nx; }
+        if (mouse.y > obj.y + obj.h) { nh = obj.y + obj.h - r.y; }
+        if (nw >= minW && nh >= minH) {
+          cropRect.x = nx; cropRect.w = nw; cropRect.h = nh;
+        }
+      } else if (cropDrag.corner === 'br') {
+        let nx = r.x;
+        let ny = r.y;
+        let nw = Math.max(minW, mouse.x - r.x - cropOffset.x);
+        let nh = Math.max(minH, mouse.y - r.y - cropOffset.y);
+        if (mouse.x > obj.x + obj.w) { nw = obj.x + obj.w - r.x; }
+        if (mouse.y > obj.y + obj.h) { nh = obj.y + obj.h - r.y; }
+        if (nw >= minW && nh >= minH) {
+          cropRect.w = nw; cropRect.h = nh;
+        }
+      }
+    } else if (cropDrag.type === 'edge') {
+      // Resize from edge, clamp to image bounds and min size
+      const obj = images[cropImageIdx];
+      if (cropDrag.edge === 'top') {
+        let ny = Math.min(mouse.y - cropOffset.y, r.y + r.h - minH);
+        if (ny < obj.x) ny = obj.y;
+        let nh = (r.y + r.h) - ny;
+        if (nh >= minH) {
+          cropRect.y = ny; cropRect.h = nh;
+        }
+      } else if (cropDrag.edge === 'bottom') {
+        let nh = Math.max(minH, mouse.y - r.y - cropOffset.y);
+        if (mouse.y > obj.y + obj.h) nh = obj.y + obj.h - r.y;
+        if (nh >= minH) {
+          cropRect.h = nh;
+        }
+      } else if (cropDrag.edge === 'left') {
+        let nx = Math.min(mouse.x - cropOffset.x, r.x + r.w - minW);
+        if (nx < obj.x) nx = obj.x;
+        let nw = (r.x + r.w) - nx;
+        if (nw >= minW) {
+          cropRect.x = nx; cropRect.w = nw;
+        }
+      } else if (cropDrag.edge === 'right') {
+        let nw = Math.max(minW, mouse.x - r.x - cropOffset.x);
+        if (mouse.x > obj.x + obj.w) nw = obj.x + obj.w - r.x;
+        if (nw >= minW) {
+          cropRect.w = nw;
+        }
+      }
+    }
+    draw();
+    return;
+  }
+  // ...existing code...
+});
+
+document.addEventListener('mouseup', (e) => {
+  // ...existing code...
+  if (cropMode) {
+    cropDrag = null;
+  }
+});
