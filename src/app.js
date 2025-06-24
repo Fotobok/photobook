@@ -75,14 +75,14 @@ function draw() {
       // Draw crop box if in crop mode for this image
       if (cropMode && cropImageIdx === idx && cropRect) {
         ctx.save();
-        ctx.strokeStyle = '#ff9800';
+        ctx.strokeStyle = '#ff0000'; // red for crop box
         ctx.lineWidth = 2;
         ctx.setLineDash([6, 4]);
         ctx.strokeRect(cropRect.x, cropRect.y, cropRect.w, cropRect.h);
         ctx.setLineDash([]);
         // Draw crop handles (corners and edges)
         const handles = getCropHandles(cropRect);
-        ctx.fillStyle = '#ff9800';
+        ctx.fillStyle = '#ff0000'; // red for handles
         handles.forEach(h => {
           ctx.beginPath();
           ctx.arc(h.x, h.y, 6, 0, 2 * Math.PI);
