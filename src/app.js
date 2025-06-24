@@ -71,6 +71,20 @@ function draw() {
           ctx.arc(h.x, h.y, 8, 0, 2 * Math.PI);
           ctx.fill();
         });
+
+        // --- Draw image size in top-left corner of selected image ---
+        const pxPerCm = 96 / 2.54;
+        const wCm = (imgObj.w / pxPerCm).toFixed(2);
+        const hCm = (imgObj.h / pxPerCm).toFixed(2);
+        const label = `${Math.round(imgObj.w)}×${Math.round(imgObj.h)} px (${wCm}×${hCm} cm)`;
+        ctx.save();
+        ctx.font = '13px sans-serif';
+        ctx.textBaseline = 'top';
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        ctx.fillRect(imgObj.x, imgObj.y, ctx.measureText(label).width + 10, 22);
+        ctx.fillStyle = '#fff';
+        ctx.fillText(label, imgObj.x + 5, imgObj.y + 4);
+        ctx.restore();
       }
       // Draw crop box if in crop mode for this image
       if (cropMode && cropImageIdx === idx && cropRect) {
@@ -185,8 +199,9 @@ canvas.addEventListener('mousedown', (e) => {
   }
   // --- Prevent image selection/drag when cropping ---
   if (cropMode) return;
-  selectedImageIdx = null;
+  // Remove: selectedImageIdx = null; (so selection persists unless clicking empty space)
   dragging = null;
+  let found = false;
   // --- Shift+resize for cropping --- (remove cropping logic)
   for (let i = images.length - 1; i >= 0; i--) {
     const obj = images[i];
@@ -212,18 +227,28 @@ canvas.addEventListener('mousedown', (e) => {
     }
     // Check drag
     if (mouse.x > obj.x && mouse.x < obj.x + obj.w && mouse.y > obj.y && mouse.y < obj.y + obj.h) {
-      dragging = i;
-      offsetX = mouse.x - obj.x;
-      offsetY = mouse.y - obj.y;
+      // Select image on single click
       selectedImageIdx = i;
+      found = true;
+      // Only start dragging if mouse is moved (handled in mousemove)
       // Bring to front only if not already top
       if (i !== images.length - 1) {
         images.push(images.splice(i, 1)[0]);
-        dragging = images.length - 1;
+        selectedImageIdx = images.length - 1;
       }
       draw();
+      // Only set dragging if mouse is moved (see mousemove)
+      // But for now, set dragging here for legacy behavior:
+      dragging = images.length - 1;
+      offsetX = mouse.x - images[dragging].x;
+      offsetY = mouse.y - images[dragging].y;
       return;
     }
+  }
+  // If click not on any image, clear selection
+  if (!found) {
+    selectedImageIdx = null;
+    draw();
   }
 });
 
