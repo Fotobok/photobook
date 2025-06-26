@@ -426,7 +426,11 @@ canvas.addEventListener('drop', (e) => {
     const img = new window.Image();
     img.onload = () => {
       const margin = 40;
-      const maxW = canvas.width - margin * 2;
+      if (doublepage) {
+        maxW = canvas.width/2 - margin * 2;
+      } else {
+        maxW = canvas.width - margin * 2;
+      }
       const maxH = canvas.height - margin * 2;
       let w = img.width, h = img.height, aspect = w / h;
       if (w > maxW) { w = maxW; h = w / aspect; }
