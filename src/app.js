@@ -198,7 +198,54 @@ canvas.addEventListener('mousedown', (e) => {
     return;
   }
   // --- Prevent image selection/drag when cropping ---
-  if (cropMode) return;
+  if (cropMode && cropImageIdx !== null && cropRect) {
+    const mouse = getMouse(e);
+    // Check corners first
+    const handles = getCropHandles(cropRect);
+    for (let h of handles) {
+      if (Math.hypot(mouse.x - h.x, mouse.y - h.y) <= 10) {
+        cropDrag = { type: 'corner', corner: h.corner };
+        cropOffset.x = mouse.x - h.x;
+        cropOffset.y = mouse.y - h.y;
+        return;
+      }
+    }
+    // Check edges
+    const edges = getCropEdges(cropRect);
+    for (let ed of edges) {
+      if (ed.edge === 'top' || ed.edge === 'bottom') {
+        if (Math.abs(mouse.x - ed.x) < cropRect.w / 2 && Math.abs(mouse.y - ed.y) < 12) {
+          cropDrag = { type: 'edge', edge: ed.edge };
+          cropOffset.y = mouse.y - ed.y;
+          return;
+        }
+      } else {
+        if (Math.abs(mouse.y - ed.y) < cropRect.h / 2 && Math.abs(mouse.x - ed.x) < 12) {
+          cropDrag = { type: 'edge', edge: ed.edge };
+          cropOffset.x = mouse.x - ed.x;
+          return;
+        }
+      }
+    }
+    // Check inside crop rect for move
+    if (
+      mouse.x > cropRect.x && mouse.x < cropRect.x + cropRect.w &&
+      mouse.y > cropRect.y && mouse.y < cropRect.y + cropRect.h
+    ) {
+      cropDrag = { type: 'move' };
+      cropOffset.x = mouse.x - cropRect.x;
+      cropOffset.y = mouse.y - cropRect.y;
+      return;
+    }
+    // If click outside crop rect, exit crop mode
+    cropMode = false;
+    cropImageIdx = null;
+    cropRect = null;
+    cropDrag = null;
+    draw();
+    return;
+  }
+
   dragging = null;
   let found = false;
   // --- Shift+resize for cropping --- (remove cropping logic)
