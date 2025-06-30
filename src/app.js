@@ -1,6 +1,7 @@
 // Photobook: Upload, arrange, resize, crop images on a canvas
 
 const canvas = document.getElementById('photo-canvas');
+const container = document.getElementById('canvas-container');
 const ctx = canvas.getContext('2d');
 const upload = document.getElementById('image-upload');
 
@@ -10,34 +11,73 @@ let offsetX, offsetY;
 // Single/double page state
 let doublepage = false;
 
-// --- Image Upload ---
-upload.addEventListener('change', (e) => {
-  Array.from(e.target.files).forEach(file => loadImageFile(file, canvas, doublepage, draw));
+// --- Zoom and Pan State ---
+let zoom = 1;
+let panX = 0, panY = 0;
+let panning = false;
+let panStart = { x: 0, y: 0 };
+let panOrigin = { x: 0, y: 0 };
+
+canvas_width_entry = document.getElementById('canvas-width-cm');
+canvas_height_entry = document.getElementById('canvas-height-cm');
+const defaultWidthCm = parseFloat(canvas_width_entry.value);
+const defaultHeightCm = parseFloat(canvas_height_entry.value);
+
+scroll_sensitivity = 0.25
+
+console.log(cmToPx(defaultWidthCm))
+console.log(cmToPx(defaultHeightCm))
+console.log(canvas.width)
+console.log(canvas.height)
+
+const doublepage_checkbutton = document.getElementById('doublepage_checkbutton');
+
+// Add Page/Remove Page buttons
+const addPageBtn = document.getElementById('add-page-btn');
+const removePageBtn = document.getElementById('remove-page-btn');
+
+fotopages_margin = 50
+
+fotopages = []
+fotopages.push(new FotoPage(0, 0, cmToPx(defaultWidthCm), cmToPx(defaultHeightCm)));
+handleDoublePage();
+
+doublepage_checkbutton.addEventListener('change', (e) => {handleDoublePage(e)});
+
+canvas_width_entry.addEventListener('change', (e) => {
+  handleCanvasWidthChanged(e)
+  console.log('Canvas width changed:', canvas_width_entry.value);
 });
 
-// --- Double Page Toggle ---
-const doublepage_checkbutton = document.getElementById('doublepage_checkbutton');
-if (doublepage_checkbutton) {
-  doublepage_checkbutton.checked = false;
-  doublepage_checkbutton.addEventListener('change', (e) => {
-    doublepage = e.target.checked;
-    doublepage
-      ? setCanvasSize(2 * canvas.width, canvas.height)
-      : setCanvasSize(0.5 * canvas.width, canvas.height);
-  });
-}
+canvas_height_entry.addEventListener('change', (e) => {
+  handleCanvasHeightChanged(e)
+});
 
-// --- Canvas Controls (resize in cm) ---
-setupCanvasControls(canvas, setCanvasSizeCm, draw);
+// --- Image Upload ---
+upload.addEventListener('change', (e) => {
+  Array.from(e.target.files).forEach(file => loadImageFile(file, doublepage, draw));
+});
 
-// --- Canvas Edge Drag Resize ---
-let resizingCanvas = false, resizeStart = null, origWidth = null, origHeight = null;
+// Add Page/Remove Page button event listeners
+addPageBtn.addEventListener('click', () => {
+  handleAddPage();
+});
+
+removePageBtn.addEventListener('click', () => {
+  handleRemovePage();
+});
 
 // --- Mouse Events ---
 canvas.addEventListener('mousedown', handleMouseDown);
 document.addEventListener('mousemove', handleMouseMove);
 document.addEventListener('mouseup', handleMouseUp);
 canvas.addEventListener('mouseleave', () => { dragging = null; resizing = null; });
+
+window.addEventListener('resize', (e) => handleWindowResize(e, canvas));
+window.dispatchEvent(new Event('resize'));
+
+fotopages[0].center(doublepage)
+draw()
 
 // --- Drag-and-Drop Upload ---
 canvas.addEventListener('dragover', (e) => { e.preventDefault(); canvas.style.border = '2px dashed #007bff'; });
@@ -49,9 +89,9 @@ setupContextMenu(canvas, images, draw);
 
 // --- Keyboard Delete ---
 document.addEventListener('keydown', (e) => {
-  if ((e.key === 'Delete' || e.key === 'Backspace') && selectedImageIdx.value !== null) {
-    images.splice(selectedImageIdx.value, 1);
-    setSelectedImageIdx(null);
+  if ((e.key === 'Delete' || e.key === 'Backspace') && selectedImageIdx !== null) {
+    images.splice(selectedImageIdx, 1);
+    selectedImageIdx = null;
     draw();
   }
 });
@@ -59,16 +99,25 @@ document.addEventListener('keydown', (e) => {
 // --- Double Click Crop Mode ---
 canvas.addEventListener('dblclick', (e) => handleDoubleClick(e, canvas, images, draw));
 
+// --- Mouse Wheel for Zoom ---
+canvas.addEventListener('wheel', (e) => handleScrolling(e), { passive: false });
+
+
+function cmToPx(cm, dpi = 96) {
+  return Math.round((cm / 2.54) * dpi);
+}
+
 // --- Mouse Event Handlers ---
 function handleMouseDown(e) {
   const mouse = getMouse(e);
-  // Canvas edge resize
-  if (e.offsetX > canvas.width - 15 && e.offsetY > canvas.height - 15) {
-    resizingCanvas = true;
-    resizeStart = { x: e.clientX, y: e.clientY };
-    origWidth = canvas.width;
-    origHeight = canvas.height;
-    document.body.style.cursor = 'nwse-resize';
+
+  // canvas pan and zoom
+  if (e.button === 1 || (e.button === 0 && e.ctrlKey)) {
+    panning = true;
+    panStart = getMouse(e, false); // screen coords
+    panOrigin = { x: panX, y: panY };
+    canvas.style.cursor = 'grab';
+    e.preventDefault();
     return;
   }
   // Crop mode: handle crop rect drag/resize
@@ -86,49 +135,64 @@ function handleMouseDown(e) {
     // Resize handles
     for (let h of getResizeHandles(obj)) {
       if (Math.hypot(mouse.x - h.x, mouse.y - h.y) <= 10) {
-        selectedImageIdx.value = i; // <-- fix: set .value, not the variable itself
+        selectedImageIdx = i;
         resizing = i;
         resizeCorner = h.corner;
-        offsetX = mouse.x - obj.x;
-        offsetY = mouse.y - obj.y;
-        draw(images, selectedImageIdx.value, cropMode, cropImageIdx, cropRect, doublepage); // always pass current state
+        offsetX = mouse.x - obj.pos.x;
+        offsetY = mouse.y - obj.pos.y;
+        draw(images, selectedImageIdx, cropMode, cropImageIdx, cropRect, doublepage); // always pass current state
         return;
       }
     }
     // Drag image
-    if (mouse.x > obj.x && mouse.x < obj.x + obj.w && mouse.y > obj.y && mouse.y < obj.y + obj.h) {
-      selectedImageIdx.value = i; // <-- fix: set .value, not the variable itself
+    if (
+      mouse.x > obj.pos.x &&
+      mouse.x < obj.pos.x + obj.dims.width &&
+      mouse.y > obj.pos.y &&
+      mouse.y < obj.pos.y + obj.dims.height
+    ) {
+      selectedImageIdx = i;
       found = true;
       if (i !== images.length - 1) {
         images.push(images.splice(i, 1)[0]);
-        selectedImageIdx.value = images.length - 1;
+        selectedImageIdx = images.length - 1;
       }
-      draw(images, selectedImageIdx.value, cropMode, cropImageIdx, cropRect, doublepage);
+      draw(images, selectedImageIdx, cropMode, cropImageIdx, cropRect, doublepage);
       dragging = images.length - 1;
-      offsetX = mouse.x - images[dragging].x;
-      offsetY = mouse.y - images[dragging].y;
+      offsetX = mouse.x - images[dragging].pos.x;
+      offsetY = mouse.y - images[dragging].pos.y;
       return;
     }
   }
-  if (!found) { selectedImageIdx.value = null; draw(images, selectedImageIdx.value, cropMode, cropImageIdx, cropRect, doublepage); }
+  if (!found) {
+    selectedImageIdx = null;
+    draw(images, selectedImageIdx, cropMode, cropImageIdx, cropRect, doublepage);
+  }
 }
+
+// --- Utility: Get Mouse Position (optionally in screen or canvas coords) ---
+function getMouse(e, relative = "canvas") {
+  const rect = canvas.getBoundingClientRect();
+  let x = (e.clientX - rect.left);
+  let y = (e.clientY - rect.top);
+  if (relative == "canvas") {
+    x = (x - panX) / zoom;
+    y = (y - panY) / zoom;
+  }
+  return { x, y };
+}
+
 function handleMouseMove(e) {
   const mouse = getMouse(e);
-  if (resizingCanvas) {
-    // Canvas edge resize
-    const dx = e.clientX - resizeStart.x, dy = e.clientY - resizeStart.y;
-    const pxPerCm = 96 / 2.54;
-    const newWcm = Math.max(1, (origWidth + dx) / pxPerCm);
-    const newHcm = Math.max(1, (origHeight + dy) / pxPerCm);
-    setCanvasSizeCm(newWcm, newHcm);
-    document.getElementById('canvas-width-cm').value = newWcm.toFixed(1);
-    document.getElementById('canvas-height-cm').value = newHcm.toFixed(1);
+
+  if (panning) {
+    handleCanvasPan(getMouse(e, "screen"), panOrigin, panStart)
   } else if (dragging !== null) {
     // Drag image with snapping
     handleImageDrag(mouse, dragging, offsetX, offsetY, canvas, doublepage, draw);
   } else if (resizing !== null) {
     // Resize image
-    handleImageResize(mouse, resizing, resizeCorner, canvas, draw);
+    handleImageResize(mouse, resizing, resizeCorner, draw);
   }
   // Crop drag logic
   if (cropMode && cropImageIdx !== null && cropRect && cropDrag) {
@@ -137,19 +201,23 @@ function handleMouseMove(e) {
     return;
   }
 }
+
 function handleMouseUp() {
-  if (resizingCanvas) {
-    resizingCanvas = false;
-    document.body.style.cursor = '';
-  } else {
-    dragging = null;
-    resizing = null;
-    resizeCorner = null;
+  if (panning) {
+    panning = false;
+    canvas.style.cursor = '';
+    return;
   }
-  if (cropMode) cropDrag = null;
+  dragging = null;
+  resizing = null;
+  resizeCorner = null;
+  if (cropMode)
+    cropDrag = null;
 }
+
 function handleDrop(e) {
   e.preventDefault();
+  const mouse = getMouse(e);
   canvas.style.border = '';
-  Array.from(e.dataTransfer.files).forEach(file => loadImageFile(file, canvas, doublepage, draw));
+  Array.from(e.dataTransfer.files).forEach(file => loadImageFile(file, mouse));
 }
