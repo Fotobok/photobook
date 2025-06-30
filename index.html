@@ -17,17 +17,21 @@
     <input type="file" id="image-upload" multiple accept="image/*">
     <input type="checkbox" id="doublepage_checkbutton" name="doublepage_checkbutton">
     <label for="doublepage_checkbutton"> Double page</label><br>
+    <button id="add-page-btn" style="margin-top:8px;">Add Page</button>
+    <button id="remove-page-btn" style="margin-top:8px;">Remove Page</button>
   </div>
-  <div id="canvas-container" style="display: flex; justify-content: center; align-items: flex-start; gap: 24px;">
+  <div id="canvas-container" style="display: flex; justify-content: center; align-items: flex-start;">
     <div id="spare-left"></div>
     <canvas id="photo-canvas"></canvas>
     <div id="spare-right"></div>
   </div>
   <script src="src/draw.js"></script>
+  <script src="src/fotoimage.js"></script>
+  <script src="src/fotopage.js"></script>
   <script src="src/imageLogic.js"></script>
   <script src="src/cropLogic.js"></script>
-  <script src="src/canvasControls.js"></script>
   <script src="src/contextMenu.js"></script>
+  <script src="src/canvas.js"></script>
   <script src="src/app.js"></script>
 </body>
 </html>

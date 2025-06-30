@@ -47,51 +47,51 @@ function handleCropDrag(mouse) {
   let r = { ...cropRect }, minW = 30, minH = 30, obj = images[cropImageIdx];
   if (cropDrag.type === 'move') {
     let nx = mouse.x - cropOffset.x, ny = mouse.y - cropOffset.y;
-    nx = Math.max(obj.x, Math.min(nx, obj.x + obj.w - r.w));
-    ny = Math.max(obj.y, Math.min(ny, obj.y + obj.h - r.h));
+    nx = Math.max(obj.pos.x, Math.min(nx, obj.pos.x + obj.dims.width - r.w));
+    ny = Math.max(obj.pos.y, Math.min(ny, obj.pos.y + obj.dims.height - r.h));
     cropRect.x = nx; cropRect.y = ny;
   } else if (cropDrag.type === 'corner') {
     let mx = mouse.x - cropOffset.x, my = mouse.y - cropOffset.y;
     if (cropDrag.corner === 'tl') {
       let nx = Math.min(mouse.x - cropOffset.x, r.x + r.w - minW), ny = Math.min(mouse.y - cropOffset.y, r.y + r.h - minH);
       let nw = (r.x + r.w) - nx, nh = (r.y + r.h) - ny;
-      if (nx < obj.x) { nx = obj.x; nw = (r.x + r.w) - nx; }
-      if (ny < obj.y) { ny = obj.y; nh = (r.y + r.h) - ny; }
+      if (nx < obj.pos.x) { nx = obj.pos.x; nw = (r.x + r.w) - nx; }
+      if (ny < obj.pos.y) { ny = obj.pos.y; nh = (r.y + r.h) - ny; }
       if (nw >= minW && nh >= minH) { cropRect.x = nx; cropRect.y = ny; cropRect.w = nw; cropRect.h = nh; }
     } else if (cropDrag.corner === 'tr') {
       let ny = Math.min(mouse.y - cropOffset.y, r.y + r.h - minH), nw = Math.max(minW, mouse.x - r.x - cropOffset.x), nh = (r.y + r.h) - ny;
-      if (mouse.x > obj.x + obj.w) nw = obj.x + obj.w - r.x;
-      if (ny < obj.y) { ny = obj.y; nh = (r.y + r.h) - ny; }
+      if (mouse.x > obj.pos.x + obj.dims.width) nw = obj.pos.x + obj.dims.width - r.x;
+      if (ny < obj.pos.y) { ny = obj.pos.y; nh = (r.y + r.h) - ny; }
       if (nw >= minW && nh >= minH) { cropRect.y = ny; cropRect.w = nw; cropRect.h = nh; }
     } else if (cropDrag.corner === 'bl') {
       let nx = Math.min(mouse.x - cropOffset.x, r.x + r.w - minW), nw = (r.x + r.w) - nx, nh = Math.max(minH, mouse.y - r.y - cropOffset.y);
-      if (nx < obj.x) { nx = obj.x; nw = (r.x + r.w) - nx; }
-      if (mouse.y > obj.y + obj.h) nh = obj.y + obj.h - r.y;
+      if (nx < obj.pos.x) { nx = obj.pos.x; nw = (r.x + r.w) - nx; }
+      if (mouse.y > obj.pos.y + obj.dims.height) nh = obj.pos.y + obj.dims.height - r.y;
       if (nw >= minW && nh >= minH) { cropRect.x = nx; cropRect.w = nw; cropRect.h = nh; }
     } else if (cropDrag.corner === 'br') {
       let nw = Math.max(minW, mouse.x - r.x - cropOffset.x), nh = Math.max(minH, mouse.y - r.y - cropOffset.y);
-      if (mouse.x > obj.x + obj.w) nw = obj.x + obj.w - r.x;
-      if (mouse.y > obj.y + obj.h) nh = obj.y + obj.h - r.y;
+      if (mouse.x > obj.pos.x + obj.dims.width) nw = obj.pos.x + obj.dims.width - r.x;
+      if (mouse.y > obj.pos.y + obj.dims.height) nh = obj.pos.y + obj.dims.height - r.y;
       if (nw >= minW && nh >= minH) { cropRect.w = nw; cropRect.h = nh; }
     }
   } else if (cropDrag.type === 'edge') {
     if (cropDrag.edge === 'top') {
       let ny = Math.min(mouse.y - cropOffset.y, r.y + r.h - minH);
-      if (ny < obj.x) ny = obj.y;
+      if (ny < obj.pos.y) ny = obj.pos.y;
       let nh = (r.y + r.h) - ny;
       if (nh >= minH) { cropRect.y = ny; cropRect.h = nh; }
     } else if (cropDrag.edge === 'bottom') {
       let nh = Math.max(minH, mouse.y - r.y - cropOffset.y);
-      if (mouse.y > obj.y + obj.h) nh = obj.y + obj.h - r.y;
+      if (mouse.y > obj.pos.y + obj.dims.height) nh = obj.pos.y + obj.dims.height - r.y;
       if (nh >= minH) { cropRect.h = nh; }
     } else if (cropDrag.edge === 'left') {
       let nx = Math.min(mouse.x - cropOffset.x, r.x + r.w - minW);
-      if (nx < obj.x) nx = obj.x;
+      if (nx < obj.pos.x) nx = obj.pos.x;
       let nw = (r.x + r.w) - nx;
       if (nw >= minW) { cropRect.x = nx; cropRect.w = nw; }
     } else if (cropDrag.edge === 'right') {
       let nw = Math.max(minW, mouse.x - r.x - cropOffset.x);
-      if (mouse.x > obj.x + obj.w) nw = obj.x + obj.w - r.x;
+      if (mouse.x > obj.pos.x + obj.dims.width) nw = obj.pos.x + obj.dims.width - r.x;
       if (nw >= minW) { cropRect.w = nw; }
     }
   }
@@ -101,14 +101,14 @@ function handleDoubleClick(e, canvas, images, draw) {
   if (!cropMode) {
     for (let i = images.length - 1; i >= 0; i--) {
       const obj = images[i];
-      if (mouse.x > obj.x && mouse.x < obj.x + obj.w && mouse.y > obj.y && mouse.y < obj.y + obj.h) {
+      if (mouse.x > obj.pos.x && mouse.x < obj.pos.x + obj.dims.width && mouse.y > obj.pos.y && mouse.y < obj.pos.y + obj.dims.height) {
         cropMode = true;
         cropImageIdx = i;
         cropRect = {
-          x: obj.x + obj.w * 0.1,
-          y: obj.y + obj.h * 0.1,
-          w: obj.w * 0.8,
-          h: obj.h * 0.8
+          x: obj.pos.x + obj.dims.width * 0.1,
+          y: obj.pos.y + obj.dims.height * 0.1,
+          w: obj.dims.width * 0.8,
+          h: obj.dims.height * 0.8
         };
         cropDrag = null;
         draw();
@@ -118,10 +118,10 @@ function handleDoubleClick(e, canvas, images, draw) {
   } else if (cropMode && cropImageIdx !== null) {
     // Apply crop
     const obj = images[cropImageIdx];
-    const cropX = (cropRect.x - obj.x) * (obj.img.width / obj.w);
-    const cropY = (cropRect.y - obj.y) * (obj.img.height / obj.h);
-    const cropW = cropRect.w * (obj.img.width / obj.w);
-    const cropH = cropRect.h * (obj.img.height / obj.h);
+    const cropX = (cropRect.x - obj.pos.x) * (obj.img.width / obj.dims.width);
+    const cropY = (cropRect.y - obj.pos.y) * (obj.img.height / obj.dims.height);
+    const cropW = cropRect.w * (obj.img.width / obj.dims.width);
+    const cropH = cropRect.h * (obj.img.height / obj.dims.height);
     const tempCanvas = document.createElement('canvas');
     tempCanvas.width = Math.max(1, Math.round(cropW));
     tempCanvas.height = Math.max(1, Math.round(cropH));
@@ -129,10 +129,10 @@ function handleDoubleClick(e, canvas, images, draw) {
     const croppedImg = new window.Image();
     croppedImg.onload = () => {
       obj.img = croppedImg;
-      obj.x = cropRect.x;
-      obj.y = cropRect.y;
-      obj.w = cropRect.w;
-      obj.h = cropRect.h;
+      obj.pos.x = cropRect.x;
+      obj.pos.y = cropRect.y;
+      obj.dims.width = cropRect.w;
+      obj.dims.height = cropRect.h;
       cropMode = false;
       cropImageIdx = null;
       cropRect = null;
