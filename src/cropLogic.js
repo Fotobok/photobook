@@ -51,7 +51,6 @@ function handleCropDrag(mouse) {
     ny = Math.max(obj.pos.y, Math.min(ny, obj.pos.y + obj.dims.height - r.h));
     cropRect.x = nx; cropRect.y = ny;
   } else if (cropDrag.type === 'corner') {
-    let mx = mouse.x - cropOffset.x, my = mouse.y - cropOffset.y;
     if (cropDrag.corner === 'tl') {
       let nx = Math.min(mouse.x - cropOffset.x, r.x + r.w - minW), ny = Math.min(mouse.y - cropOffset.y, r.y + r.h - minH);
       let nw = (r.x + r.w) - nx, nh = (r.y + r.h) - ny;
@@ -96,7 +95,7 @@ function handleCropDrag(mouse) {
     }
   }
 }
-function handleDoubleClick(e, canvas, images, draw) {
+function handleDoubleClick(e) {
   const mouse = getMouse(e);
   if (!cropMode) {
     for (let i = images.length - 1; i >= 0; i--) {
@@ -128,6 +127,7 @@ function handleDoubleClick(e, canvas, images, draw) {
     tempCanvas.getContext('2d').drawImage(obj.img, cropX, cropY, cropW, cropH, 0, 0, tempCanvas.width, tempCanvas.height);
     const croppedImg = new window.Image();
     croppedImg.onload = () => {
+      obj.actions.storeActionCrop(cropX, cropY, cropW, cropH);
       obj.img = croppedImg;
       obj.pos.x = cropRect.x;
       obj.pos.y = cropRect.y;

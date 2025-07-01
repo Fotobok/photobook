@@ -12,21 +12,25 @@
     <div id="canvas-controls" style="margin:12px 0;">
       <label style="margin-right:8px;">Width (cm): <input id="canvas-width-cm" type="number" min="1" step="0.1" style="width:60px;"></label>
       <label style="margin-right:8px;">Height (cm): <input id="canvas-height-cm" type="number" min="1" step="0.1" style="width:60px;"></label>
-      <button id="set-canvas-cm">Set Size</button>
     </div>
     <input type="file" id="image-upload" multiple accept="image/*">
     <input type="checkbox" id="doublepage_checkbutton" name="doublepage_checkbutton">
     <label for="doublepage_checkbutton"> Double page</label><br>
     <button id="add-page-btn" style="margin-top:8px;">Add Page</button>
     <button id="remove-page-btn" style="margin-top:8px;">Remove Page</button>
+    <button id="export-btn" style="margin-top:8px;">Export</button>
+    <button id="export-compact-btn" style="margin-top:8px;">Export Compact</button>
   </div>
   <div id="canvas-container" style="display: flex; justify-content: center; align-items: flex-start;">
     <div id="spare-left"></div>
     <canvas id="photo-canvas"></canvas>
     <div id="spare-right"></div>
   </div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/3.0.0/jspdf.umd.min.js"></script>
   <script src="src/draw.js"></script>
   <script src="src/fotoimage.js"></script>
+  <script src="src/fotoexport.js"></script>
+  <script src="src/fotoactions.js"></script>
   <script src="src/fotopage.js"></script>
   <script src="src/imageLogic.js"></script>
   <script src="src/cropLogic.js"></script>

@@ -5,8 +5,14 @@ const container = document.getElementById('canvas-container');
 const ctx = canvas.getContext('2d');
 const upload = document.getElementById('image-upload');
 
+// Currently dragged image index, resizing image index, and which corner is being resized
 let dragging = null, resizing = null, resizeCorner = null;
+
+// Mouse offset from image's top-left corner during drag/resize
 let offsetX, offsetY;
+
+let imagePosOriginal = {x: 0, y: 0};
+let imageScaleOriginal = {w: 0, h: 0};
 
 // Single/double page state
 let doublepage = false;
@@ -18,10 +24,12 @@ let panning = false;
 let panStart = { x: 0, y: 0 };
 let panOrigin = { x: 0, y: 0 };
 
+defaultWidthCm = 15
+defaultHeightCm = 21
 canvas_width_entry = document.getElementById('canvas-width-cm');
 canvas_height_entry = document.getElementById('canvas-height-cm');
-const defaultWidthCm = parseFloat(canvas_width_entry.value);
-const defaultHeightCm = parseFloat(canvas_height_entry.value);
+canvas_width_entry.value = defaultWidthCm
+canvas_height_entry.value = defaultHeightCm
 
 scroll_sensitivity = 0.25
 
@@ -96,8 +104,16 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
+const exportBtn = document.getElementById('export-btn');
+exportBtn.addEventListener('click', () => {exportFotobok();});
+
+const exportCompactBtn = document.getElementById('export-compact-btn');
+exportCompactBtn.addEventListener('click', () => {exportAllImagesCompact();});
+
+
+
 // --- Double Click Crop Mode ---
-canvas.addEventListener('dblclick', (e) => handleDoubleClick(e, canvas, images, draw));
+canvas.addEventListener('dblclick', (e) => handleDoubleClick(e));
 
 // --- Mouse Wheel for Zoom ---
 canvas.addEventListener('wheel', (e) => handleScrolling(e), { passive: false });
@@ -137,10 +153,12 @@ function handleMouseDown(e) {
       if (Math.hypot(mouse.x - h.x, mouse.y - h.y) <= 10) {
         selectedImageIdx = i;
         resizing = i;
+        imageScaleOriginal = {w: obj.dims.width, h: obj.dims.height};
+        console.log('imageScaleOriginal:', imageScaleOriginal);
         resizeCorner = h.corner;
         offsetX = mouse.x - obj.pos.x;
         offsetY = mouse.y - obj.pos.y;
-        draw(images, selectedImageIdx, cropMode, cropImageIdx, cropRect, doublepage); // always pass current state
+        draw(images, selectedImageIdx, cropMode, cropImageIdx, cropRect, doublepage); 
         return;
       }
     }
@@ -152,6 +170,7 @@ function handleMouseDown(e) {
       mouse.y < obj.pos.y + obj.dims.height
     ) {
       selectedImageIdx = i;
+      imagePosOriginal = {x: obj.pos.x, y: obj.pos.y}
       found = true;
       if (i !== images.length - 1) {
         images.push(images.splice(i, 1)[0]);
@@ -186,13 +205,13 @@ function handleMouseMove(e) {
   const mouse = getMouse(e);
 
   if (panning) {
-    handleCanvasPan(getMouse(e, "screen"), panOrigin, panStart)
+    handleCanvasPan(getMouse(e, "screen"))
   } else if (dragging !== null) {
     // Drag image with snapping
-    handleImageDrag(mouse, dragging, offsetX, offsetY, canvas, doublepage, draw);
+    handleImageDrag(mouse);
   } else if (resizing !== null) {
     // Resize image
-    handleImageResize(mouse, resizing, resizeCorner, draw);
+    handleImageResize(mouse);
   }
   // Crop drag logic
   if (cropMode && cropImageIdx !== null && cropRect && cropDrag) {
@@ -203,10 +222,26 @@ function handleMouseMove(e) {
 }
 
 function handleMouseUp() {
+  // Log state variables
+  console.log('dragging:', dragging);
+  if(dragging)
+    console.log('HHHHHHHH')
+  console.log('resizing:', resizing);
+  console.log('cropMode:', cropMode);
   if (panning) {
     panning = false;
     canvas.style.cursor = '';
     return;
+  } else if (dragging != null) {
+    if (imagePosOriginal.x !== images[dragging].pos.x || imagePosOriginal.y !== images[dragging].pos.y) {
+      images[dragging].actions.storeActionMove(imagePosOriginal.x, imagePosOriginal.y, images[dragging].pos.x, images[dragging].pos.y);
+    }
+    console.log('Dragging done:', dragging);
+  } else if (resizing != null) {
+    if (imageScaleOriginal.w !== images[resizing].dims.width || imageScaleOriginal.h !== images[resizing].dims.height) {
+      images[resizing].actions.storeActionScale(imageScaleOriginal.w, imageScaleOriginal.h, images[resizing].dims.width, images[resizing].dims.height);
+    }
+    console.log('Resizing done:', resizing);
   }
   dragging = null;
   resizing = null;
