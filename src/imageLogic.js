@@ -10,10 +10,11 @@ function loadImage(image, mouse) {
     let maxW = doublepage ? fotopages[0].dims.w / 2 - margin * 2 : fotopages[0].dims.w - margin * 2;
     const maxH = fotopages[0].dims.h - margin * 2;
     let w = image.img.width, h = image.img.height, aspect = w / h;
+    image.setOriginalDimensions(w,  h);
     if (w > maxW) { w = maxW; h = w / aspect; }
     if (h > maxH) { h = maxH; w = h * aspect; }
-    image.setPosition(mouse.x - w/2 + images.length * 30, mouse.y - h/2 + images.length * 30)
-    image.setDimensions(w,  h)
+    image.setPosition(mouse.x - w/2 + images.length * 30, mouse.y - h/2 + images.length * 30);
+    image.setDimensions(w,  h);
     images.push(image);
 }
 
@@ -28,7 +29,7 @@ function loadImageFile(file, mouse) {
 
 }
 
-function handleImageDrag(mouse, dragging, offsetX, offsetY, canvas, doublepage, draw) {
+function handleImageDrag(mouse) {
     const image = images[dragging];
     let newX = mouse.x - offsetX, newY = mouse.y - offsetY, snapDist = 10;
 
@@ -62,12 +63,13 @@ function handleImageDrag(mouse, dragging, offsetX, offsetY, canvas, doublepage, 
         if (Math.abs(newY - other.pos.y) < snapDist) newY = other.pos.y;
         if (Math.abs(newY + image.dims.height - (other.pos.y + other.dims.height)) < snapDist) newY = other.pos.y + other.dims.height - image.dims.height;
     }
-    console.log(`Dragging image to: (${newX}, ${newY})`);
+    //console.log(`Dragging image to: (${newX}, ${newY})`);
+    console.log(`offsetX: ${offsetX}, offsetY: ${offsetY}`);
     image.setPosition(newX, newY)
     draw();
 }
 
-function handleImageResize(mouse, resizing, resizeCorner, draw) {
+function handleImageResize(mouse) {
   const obj = images[resizing];
   let minW = 30, minH = 30, x = obj.pos.x, y = obj.pos.y, w = obj.dims.width, h = obj.dims.height;
   let aspect = w / h;
@@ -101,5 +103,6 @@ function handleImageResize(mouse, resizing, resizeCorner, draw) {
       obj.dims.width = propW; obj.dims.height = propH;
     }
   }
+  console.log(`Resized image dims: ${obj.dims.width}x${obj.dims.height}, original: ${obj.img.width}x${obj.img.height}`);
   draw();
 }

@@ -1,9 +1,8 @@
 
-function handleCanvasPan(mouse, panOrigin, panStart) {
+function handleCanvasPan(mouse) {
     panX = panOrigin.x + (mouse.x - panStart.x);
     panY = panOrigin.y + (mouse.y - panStart.y);
     draw();
-    return;
 }
 
 function handleScrolling(e) {
@@ -30,20 +29,22 @@ function handleScrolling(e) {
 function handleCanvasWidthChanged(e) {
     const newWidthCm = parseFloat(e.target.value);
     if (!isNaN(newWidthCm)) {
-        defaultWidthCm = cmToPx(newWidthCm);
-        fotopage.dims.w = cmToPx(newWidthCm);
-        fotopage.center();
-        draw();
+        defaultWidthCm = newWidthCm;
+        fotopages.forEach(page => {
+            page.dims.width = cmToPx(defaultWidthCm);
+        });
+        reorderPages();
     }
 }
 
 function handleCanvasHeightChanged(e) {
     const newHeightCm = parseFloat(e.target.value);
     if (!isNaN(newHeightCm)) {
-        defaultHeightCm = cmToPx(newHeightCm);
-        fotopage.dims.h = cmToPx(newHeightCm);
-        fotopage.center();
-        draw();
+        defaultHeightCm = newHeightCm;
+        fotopages.forEach(page => {
+            page.dims.height = cmToPx(defaultHeightCm);
+        });
+        reorderPages();
     }
 }
 
