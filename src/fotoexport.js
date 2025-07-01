@@ -6,8 +6,8 @@ async function cropAndScaleImages() {
             image.onload = () => {
                 console.log(`Begins...`);
                 console.log('raw_img.actions:', raw_img.actions.actions);
-                let canvas = document.createElement('canvas');
-                let ctx = canvas.getContext('2d');
+                let temp_canvas = document.createElement('canvas');
+                let ctx = temp_canvas.getContext('2d');
                 let cropX = 0, cropY = 0, cropW = image.width, cropH = image.height;
                 let dw = image.width, dh = image.height;
 
@@ -18,6 +18,7 @@ async function cropAndScaleImages() {
                     cropY = lastCrop.y;
                     cropW = lastCrop.w;
                     cropH = lastCrop.h;
+                    console.log(`Crop action found: x=${cropX}, y=${cropY}, w=${cropW}, h=${cropH}`);
                 }
 
                 // Find the first and last scale actions
@@ -32,29 +33,58 @@ async function cropAndScaleImages() {
                 if (firstScale) {
                     originalW = firstScale.fromW || cropW;
                     originalH = firstScale.fromH || cropH;
+                } else {
+                    console.warn('No scale action found for image', idx);
                 }
                 if (lastScale) {
                     finalW = lastScale.toW;
                     finalH = lastScale.toH;
+                } else {
+                    console.warn('No last scale action found for image', idx);
                 }
 
                 // Use the ratio between original and final scale
                 if (firstScale && lastScale) {
                     const ratioW = finalW / originalW;
                     const ratioH = finalH / originalH;
-                    dw = cropW * ratioW;
-                    dh = cropH * ratioH;
+                    dw = Math.round(cropW * ratioW);
+                    dh = Math.round(cropH * ratioH);
+                } else {
+                    dw = Math.round(cropW);
+                    dh = Math.round(cropH);
                 }
 
                 console.log(`cropX: ${cropX}, cropY: ${cropY}, cropW: ${cropW}, cropH: ${cropH}, dw: ${dw}, dh: ${dh}`);
 
-                canvas.width = dw;
-                canvas.height = dh;
+                // Fix: Ensure all drawImage parameters are integers and within bounds
+                const sx = Math.round(cropX);
+                const sy = Math.round(cropY);
+                const sw = Math.min(Math.round(cropW), image.width - sx);
+                const sh = Math.min(Math.round(cropH), image.height - sy);
+                const dx = 0;
+                const dy = 0;
+                const dwInt = Math.max(1, Math.round(dw));
+                const dhInt = Math.max(1, Math.round(dh));
+
+                temp_canvas.width = dwInt;
+                temp_canvas.height = dhInt;
+                ctx.clearRect(0, 0, dwInt, dhInt);
                 ctx.imageSmoothingEnabled = true;
                 ctx.imageSmoothingQuality = 'high';
-                ctx.drawImage(image, cropX, cropY, cropW, cropH, 0, 0, dw, dh);
+                ctx.drawImage(
+                    image,
+                    sx, sy, sw, sh,
+                    dx, dy, dwInt, dhInt
+                );
                 // Use JPEG at max quality, or PNG if you prefer lossless
-                resolve(canvas.toDataURL('image/jpeg', 1.0));
+                resolve(temp_canvas.toDataURL('image/jpeg', 1.0));
+                // For debugging: open or save this image
+                // Uncomment one of the following lines as needed:
+                // window.open(temp_canvas.toDataURL('image/jpeg', 1.0), '_blank');
+                // const link = document.createElement('a');
+                // link.href = temp_canvas.toDataURL('image/jpeg', 1.0);
+                // link.download = `debug_image_${idx}.jpg`;
+                // link.click();
             };
             // Robustly set image.src
             if (raw_img.img && raw_img.img.src) {
@@ -128,6 +158,8 @@ async function exportFotobok() {
                 imageIndex: imgIndex
             };
 
+            console.log('Image placement:', placement);
+
             // Check if the image overlaps with the page
             const overlaps =
                 placement.x < pageX + pageW &&
@@ -161,8 +193,10 @@ async function exportFotobok() {
  */
 async function exportAllImagesCompact() {
     // Use a default page size (A4 in pt)
-    const pageWidth = 595;
-    const pageHeight = 842;
+    // Set PDF size to match the first fotopage's dimensions (in points)
+    const firstPage = fotopages[0];
+    const pageWidth = firstPage?.dims?.w ?? 595; // fallback to A4 width in pt
+    const pageHeight = firstPage?.dims?.h ?? 842; // fallback to A4 height in pt
     const margin = 10; // margin between images
 
     const doc = new window.jspdf.jsPDF({
